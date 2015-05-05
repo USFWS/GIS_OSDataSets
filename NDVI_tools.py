@@ -23,9 +23,13 @@ def funNDVI(tif):
     nir=np.array(tifbands[3],dtype= float)
     #make sure the arrays selected are not empty
     check = np.logical_and ( red > 1, nir > 1 )
-    #do the ndvi calculation set nodata values to -9
-    ndvi = np.where ( check,  (nir - red ) / ( nir + red ),-9) 
-    nullnum=-9
+    #do the ndvi calculation and scale the output of 1 to -1  to values between 250 and 0 
+    #clipping values less than -0.25.  This is the same proceedure as the MODIS NDVI 
+    #analysis , see
+    #http://www.glcf.umd.edu/data/ndvi/ 
+    #http://staff.glcf.umd.edu/sns/branch/htdocs.sns/library/guide/techguide_ndvi.pdf. This gives an effective 
+    ndvi = np.where ( check,  (200*((nir - red ) / ( nir + red )))+50,253) 
+    nullnum=253
     #get projection and datum info from original file
     geo = g.GetGeoTransform()  
     proj = g.GetProjection()  
@@ -33,22 +37,24 @@ def funNDVI(tif):
     shape = red.shape 
     #use the Geotiff driver for output
     driver = gdal.GetDriverByName("GTiff")
-    #create the temp output file settings
-    dst_ds = driver.Create( "temptiff", shape[1], shape[0], 1, gdal.GDT_Float32)
+    #create the  output file settings
+    # changed the output data type to integer byte format deflate compressed with predictor 2 
+    dst_ds = driver.Create( "newtiff", shape[1], shape[0], 1, gdal.GDT_Byte, options=['COMPRESS=DEFLATE','PREDICTOR=2'])
     #set the output datum and projection
     dst_ds.SetGeoTransform( geo )
     dst_ds.SetProjection( proj )
     #Start write of temp output file
     dst_ds.GetRasterBand(1).WriteArray(ndvi)
     dst_ds = None;g=None  # save, close of output file and input file
+    #after testing the text below this line can be removed
     #create command line string to create an intermediate temporary virtual file
-    sysCall = "gdalbuildvrt -srcnodata -9  test.vrt temptiff"
-    os.system(sysCall)
+    #sysCall = "gdalbuildvrt -srcnodata -9  test.vrt temptiff"
+    #os.system(sysCall)
     #create command line string to create the losslessly compressed final geotiff file using the 
     #co predictor=3 option for best compression of the floating point output
     #
-    finaltiff="gdal_translate -of GTiff -co COMPRESS=DEFLATE -co predictor=3 test.vrt %s"%(newtiff)
-    os.system(finaltiff)
+    #finaltiff="gdal_translate -of GTiff -co COMPRESS=DEFLATE -co predictor=3 test.vrt %s"%(newtiff)
+    #os.system(finaltiff)
 
 def testIsString(input):
     return isinstance(input,basestring)
